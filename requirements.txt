@@ -1,0 +1,10 @@
+transformers==4.57.6
+peft==0.18.1
+bitsandbytes
+accelerate
+datasets
+pillow
+numpy
+pandas
+torch
+ipykernel
