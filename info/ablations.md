@@ -40,7 +40,42 @@ This document tracks the experiments, configurations, and results for the `SmolV
 - **Results:** 
   - **Epoch 1:** Train Loss (0.3154) | Val Loss (0.7562)
   - **Epoch 2:** Train Loss (0.2163) | Val Loss (0.9002)
-  - **Final Leaderboard Accuracy:** **~65%** (Best yet!)
+  - **Submission File:** `submission_20260427_112131.csv`
+  - **Final Leaderboard Accuracy:** **69%** (Best yet!)
 - **Analysis:** 
-  - The massive increase from ~37% to ~65% proves the prompt masking algorithm and left-padding inference adjustments heavily salvaged the model's logic capabilities!
-  - **Overfitting Warning:** While training loss plummeted in Epoch 2, Validation Loss spiked. This heavily indicates the adapter weights began overfitting on the training data. The optimal mathematical setup is likely sitting natively inside an `Epoch 1` mid-step checkpoint!
+  - The massive increase from ~37% to 69% proves the prompt masking algorithm, left-padding adjustments, and probability logit extraction heavily salvaged the model's logic capabilities!
+  - **Optimal Weights:** Evaluating the CSV metric logs revealed the lowest true validation loss (0.3115) belonged to `Epoch 2, Step 3108`. We bypassed the traditional string-generation pipeline by using `torch.argmax` on raw target logits to pull out the correct multiple-choice probability.
+
+---
+
+## 4. Training Run 3 (Improved Inference Decoding)
+- **Goal:** Enhance inference accuracy by switching from logit-based token extraction to text-based decoding with longer generation.
+- **Adjustments:**
+  - Switched inference to generate `max_new_tokens=2` and decode full text output instead of extracting first token logits.
+  - Used text parsing to extract answer letters from generated responses (e.g., "Answer: A").
+  - Loaded the final trained checkpoint (`models/20260426_233953/final`) instead of epoch 1.
+  - Maintained left-padding and prompt masking from Run 2.
+- **Results:** 
+  - **Final Leaderboard Accuracy:** **74%**
+- **Analysis:** 
+  - The shift to text-based decoding allowed the model to generate more natural responses, improving accuracy by 5% over the logit extraction method.
+  - This demonstrates that for instruction-tuned models, full generation can outperform direct logit manipulation in multiple-choice tasks.
+
+---
+
+## 5. Training Run 4 (Batch Inference with Memory Fixes)
+- **Goal:** Optimize for free-tier Colab by reducing memory usage and enabling batch processing.
+- **Adjustments:**
+  - Reduced `batch_size` to 2 (later 1) and `num_workers` to 1 to avoid OOM.
+  - Set `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` for better GPU memory management.
+  - Added `torch.cuda.empty_cache()` after each batch.
+  - Used `num_beams=1` (greedy decoding) instead of beam search.
+  - Improved decoding to extract only generated tokens rather than the full prompt + output sequence.
+- **Results:** 
+  - **Final Leaderboard Accuracy:** **74.446%** (same as previous best)
+- **Analysis:** 
+  - **Memory Fixes Worked:** The OOM and parsing issues were corrected, but the final accuracy did not improve, which means the current checkpoint and decoding pipeline were already at the same performance level.
+  - **Earlier Checkpoint Match:** An earlier checkpoint in epoch 2 produced **74.25%**, effectively identical to the best result and confirming the model had already plateaued by the end of training.
+  - **No Improvement from Greedy/Batch Tuning:** This suggests the remaining gains are not from low-level generation settings like batch size, beams, or padding; instead, they are more likely in prompt formatting, answer extraction, or model scoring.
+  - **Next Run Plan:** Match the training and inference prompt formats exactly, add stronger parsing for generated choices, lower the learning rate, and skip data augmentation for now.
+  - **Epoch Recommendation:** Run for **3 epochs** with checkpointing and select the best validation checkpoint, since epoch 2 already flattened and the final checkpoint showed no gain.
