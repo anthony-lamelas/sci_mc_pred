@@ -79,3 +79,42 @@ This document tracks the experiments, configurations, and results for the `SmolV
   - **No Improvement from Greedy/Batch Tuning:** This suggests the remaining gains are not from low-level generation settings like batch size, beams, or padding; instead, they are more likely in prompt formatting, answer extraction, or model scoring.
   - **Next Run Plan:** Match the training and inference prompt formats exactly, add stronger parsing for generated choices, lower the learning rate, and skip data augmentation for now.
   - **Epoch Recommendation:** Run for **3 epochs** with checkpointing and select the best validation checkpoint, since epoch 2 already flattened and the final checkpoint showed no gain.
+
+---
+
+## 6. Training Run 5 (Lower LR + Matched Prompt Format + Extended Training)
+- **Goal:** Improve on plateau by lowering learning rate, matching prompt format exactly between training/inference, and extending to 3 epochs.
+- **Hyperparameters:**
+  - `lr`: 1e-4 (halved from 2e-4)
+  - `EPOCHS`: 3
+  - Prompt format: `"Answer: "` with trailing space (exact match between training target and inference)
+  - Stronger answer parsing: prioritize `ANSWER: X` pattern, fall back to bare letter, then strip non-letters
+- **Training Results:**
+  - **Epoch 1:** Val Loss 0.3045 (at step 3108)
+  - **Epoch 2:** Val Loss 0.2877 (at step 3108) — **Best validation loss yet!**
+  - **Epoch 3:** Val Loss 0.2941 → 0.2967 (clear overfitting; train loss near 0)
+- **Initial Inference Result:** **44.8% Accuracy**
+- **Root Cause Analysis:**
+  - **Training Success, Inference Failure:** The new model trained *better* (lower val loss) than all previous runs.
+  - **Checkpoint Mismatch Bug:** The 44.8% result used the *old checkpoint* (`20260426_233953`) instead of the new trained model, causing a train/inference format mismatch.
+---
+
+## 6. Training Run 6 (Checkpoint Fix + Overfitting Investigation)
+- **Goal:** Use the correct new checkpoint from Run 5 to evaluate the improved training.
+- **Adjustments:**
+  - Loaded the best checkpoint from Run 5: `models/20260429_183205/checkpoints/epoch_2_step_3108` (val loss 0.2877)
+  - Maintained all other settings: LR=1e-4, EPOCHS=3, matched prompt format, stronger parsing.
+- **Results:** 
+  - **Final Leaderboard Accuracy:** **50.9%**
+- **Analysis (Why worse than baseline?):**
+  - **Overfitting Suspected:** Despite lower validation loss (0.2877), the test accuracy dropped significantly below the zero-shot baseline (54.3%). This suggests the model overfit to the training data, losing generalization ability.
+  - **Possible Causes:**
+    - **Training Data Overfitting:** With only ~10k training samples and a small model (4.3M params), the adapter may have memorized training patterns instead of learning robust reasoning.
+    - **Checkpoint Selection Issue:** Although epoch 2 step 3108 had the lowest val loss, it might still be overfit compared to earlier checkpoints or the base model.
+    - **Prompt/Format Sensitivity:** The exact prompt matching might have made the model too rigid, reducing flexibility on unseen test questions.
+  - **Next Steps:** Try earlier checkpoints (e.g., epoch 1), add regularization (dropout, weight decay), or reduce training epochs to prevent overfitting.
+
+## 7. Inference Sweep Update
+- Replaced the validation tuning cell with a single test-only inference sweep.
+- Each config now writes its own CSV immediately after test inference.
+- This avoids waiting for validation config tuning before generating submission files.
