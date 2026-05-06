@@ -118,3 +118,19 @@ This document tracks the experiments, configurations, and results for the `SmolV
 - Replaced the validation tuning cell with a single test-only inference sweep.
 - Each config now writes its own CSV immediately after test inference.
 - This avoids waiting for validation config tuning before generating submission files.
+
+---
+
+## 8. Training Run 7 (DoRA + Augmentation + Metadata + 336px)
+- **Goal:** Recover from the severe overfitting seen in Runs 5/6 and implement easy performance enhancements.
+- **Adjustments:**
+  - Increased `IMG_SIZE` from 224 to 336 for better visual parsing.
+  - Upgraded LoRA to DoRA (`use_dora=True`).
+  - Added Image Data Augmentation (`RandomCrop`, `RandomRotation`, `ColorJitter`) to the training split.
+  - Injected `Subject` and `Topic` metadata into the prompt and moved the `Question:` before the context.
+  - Evaluated on intermediate checkpoint: `epoch_2_step_2072` (Val Loss: ~0.375).
+- **Results:** 
+  - **Final Leaderboard Accuracy:** **65.0%**
+- **Analysis:** 
+  - The combination of image size, metadata, and DoRA helped the model recover from the 50.9% overfitting drop, though it hasn't quite surpassed the 74.4% peak from Run 4. 
+  - The heavy regularization from the data augmentation makes it harder for the model to memorize the training set. This suggests we should allow the model to finish its 3rd training epoch, as it likely needs more steps to converge with these augmentations active!

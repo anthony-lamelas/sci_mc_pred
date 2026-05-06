@@ -9,3 +9,5 @@ pandas
 torch
 ipykernel
 matplotlib
+torchvision
+torchaudio
