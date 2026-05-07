@@ -148,3 +148,20 @@ This document tracks the experiments, configurations, and results for the `SmolV
   - The catastrophic drop in accuracy confirmed that the base model's instruction-following capabilities were broken. 
   - The core issues were identified as: (1) injecting `Subject:`/`Topic:` and reordering `Question`/`Context` drastically altered the expected prompt template, confusing the LoRA adapter, and (2) `RandomCrop` augmentation was likely deleting critical diagram labels.
   - **Next Steps:** Revert prompt structure to its original Run 4 format, disable `RandomCrop`, increase resolution to 448px, and retrain cleanly from scratch.
+
+---
+
+## 10. Training Run 9 (Clean Retrain: 448px, Safe Augs, Original Prompt)
+- **Goal:** Execute a clean 3-epoch training run with all bugs fixed to surpass the 74.4% plateau.
+- **Adjustments:**
+  - Reverted prompt template to match original base model expectations (`Context` before `Question`, no injected metadata).
+  - Maintained DoRA (`use_dora=True`).
+  - Increased `IMG_SIZE` to **448** to maximize visual clarity of small text.
+  - Disabled `RandomCrop` to protect diagram labels. Kept `RandomRotation` and `ColorJitter`.
+  - Fixed a major inference bug where the notebook was accidentally overriding the newly trained weights with a hardcoded bad checkpoint (`models/20260506_113510`) right before inference.
+- **Results:** 
+  - **Final Leaderboard Accuracy:** **68.0%**
+- **Analysis:** 
+  - The model successfully recovered from the 41% catastrophe, proving the prompt template and `RandomCrop` fixes were necessary! 
+  - However, the final score of 68.0% is still noticeably below our 74.4% peak from Run 4. This implies that the image size bump to 448px, combined with `RandomRotation` and `ColorJitter`, might be adding too much complexity or regularization for the model to fully digest within just 3 epochs.
+  - **Next Steps:** Consider removing `RandomRotation` and `ColorJitter` entirely (returning to zero augmentations like Run 4) or dropping `IMG_SIZE` back to 224/336 to isolate exactly what is causing the slight ~6% drag compared to the peak run.

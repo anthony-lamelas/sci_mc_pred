@@ -1,0 +1,428 @@
+Fine-Tuning SmolVLM-500M-Instruct for Multimodal Question Answering
+
+Anthony Lamelas
+al8372@nyu.edu
+
+1
+
+Bolaji Alabi
+ooa310@nyu.edu
+
+Introduction
+
+feasible on a single GPU. Training occurred for
+3000-5000 steps, saving checkpoints periodically
+in case of shutdown. The prompt format consisted
+of a system message describing the task, a user
+message with the image description, leading to the
+model outputting raw SVG.
+Training occurred on a single Nvidia GeForce
+RTX 3080 GPU and used the transformers, peft, trl,
+and Unsloth libraries for organization and increased
+efficiency.
+
+This report describes our project focusing on finetuning small language models to generate valid
+Scalable Vector Graphic (SVG) images given
+a description of an icon/symbol for a Kaggle
+competition. SVGs are eXtensible Markup Language (XML) based, human-readable, and scalable.
+SVGs require valid syntax and structure, making
+this task much harder than generic text generation. Another challenge is that the typical models
+are trained on text, not graphics, meaning most
+small models will not have a great understanding
+of SVGs.
+Our approach was to fine-tune a pre-trained
+model on a dataset of descriptions and SVG pairs
+using Low Rank Adaptation (LoRA). This allowed
+for efficient fine-tuning without updating all of the
+model’s weights. Submissions are scored against
+ground-truth images using a pre-provided similarity metric. Our best model achieved a strong score
+on the public leaderboard, outperforming around
+two-thirds of the class.
+
+2
+
+Methodology
+
+2.1
+
+Training
+
+2.2
+
+Inference and Post-Processing
+
+Inference was performed by first loading the finetuned LoRA adapter on top of the quantized base
+model. Generation followed with random sampling, a temperature of 0.2, and a top p of 0.9.
+Batched inference with a size of 6 was used as
+well.
+After the model completed generation, the SVGs
+were extracted using regex. A repair pipeline was
+also applied, stripping invalid HTML tags in the
+output. Also, if no valid SVG could be output, a
+placeholder SVG would be submitted in its place
+(white background with black circle).
+
+The training was done using a competition-given
+dataset (NYU Tandon Deep Learning Course Staff,
+2026b) consisting of 50,000 samples of description
+and SVG pairs. The descriptions were in natural
+language. We chose Qwen2.5-3B-Instruct (Qwen
+Team, 2024) as our base model. It was a solid
+choice as it is pre-trained on tasks such as coding
+and following instructions. It was also only 3 billion parameters (the competition maximum was 4
+billion).
+LoRA was used during the fine-tuning process.
+This freezes the base model weights and adds small
+trainable rank-decomposition matrices to the attention layers. LoRA reduces the amound of training parameters, making training much faster and
+
+2.3
+
+Evaluation
+
+The competition uses a two-stage metric with a
+hard validity gate followed by a quality score for
+valid SVGs (NYU Tandon Deep Learning Course
+Staff, 2026a). Each hidden sample i has prompt
+ti , reference SVG gi , and predicted SVG pi . A
+sample receives vi = 1 only if the SVG parses
+correctly, uses allowed tags, satisfies complexity
+limits, and renders successfully; otherwise vi = 0
+and the sample score is zero.
+Visual Fidelity (Vi , weight 0.85):
+Vi = 0.7·SSIM(I(pi ), I(gi ))+0.3·EdgeF1(I(pi ), I(gi ))
+(1)
+1
+
+Structural Similarity (Si , weight 0.12):
+
+
+Si = exp −
+
+T ED(A(pi ), A(gi ))
+25
+
+
+
+(2)
+
+
+
+len(pi ) + 50
+len(gi ) + 50
+
+
+
+(3)
+
+Composite Score
+The per-sample quality score uses a geometric
+mean with the above weights:
+Qi = Vi0.85 · Si0.12 · Ci0.03 ,
+
+3
+
+4.1
+
+Model Scale
+
+scorei = vi · Qi (4)
+4.2
+
+Final Leaderboard Score
+The final private leaderboard score is the mean of
+all per-row scores, scaled to 100:
+F inalScore = 100 ×
+
+Ablations
+
+As mentioned previously, we tested both a 1.5B
+and a 3B version of Qwen. While the 1.5B model
+was only tested to verify our pipeline, the architectural motivation is clear, as SVG generation requires simultaneously understanding text and generating syntactically precise XML. The 3B model
+produced richer, longer SVGs on average, supporting the hypothesis that scale matters for structured
+generative tasks.
+
+Compactness (Ci , weight 0.03):
+Ci = exp − log
+
+4
+
+N
+1 X
+scorei
+N i=1
+
+LoRA Rank and Alpha
+
+The second experiment used a LoRA rank of 8 and
+an alpha of 16, while the third experiment used
+16 and 32, respectively. A higher rank means the
+adapter can represent more complex weight updates. We wanted to give the model more capacity
+to learn SVG geometry. However, our results contradicted this expectation as the third experiment
+scored slightly lower, even though we expected
+much improvement (that model was also trained for
+much longer). A possible reason for this could be
+that the higher rank could have caused the adapter
+to memorize specific path coordinate patterns from
+the training SVGs, reducing generalization performance.
+
+(5)
+
+Experiments
+
+Three main experiments were run. The first experiment used Qwen2.5-1.5B-Instruct. This model was
+only trained for 7 steps (1 epoch) and was simply
+used to confirm that the notebook was working.
+The second experiment used Qwen2.5-3BInstruct, which was trained for 3,063 steps. This
+model includes checkpoints to save the training,
+and it recorded consistent improvement in the evaluation loss. This loss was consistent and showed
+no signs of overfitting. The result from this experiment was also our final submission, achieving
+a score of 15.03. This run also recorded a 35.1
+percent fallback rate, mostly due to truncation of
+outputs. It is important to note that we did attempt
+another inference run with this model with different
+parameters; however, the score dropped to 14.40.
+The third and final experiment, double training
+capacity by increasing LoRA rank from 8 to 16
+and alpha from 16 to 32. This experiment trained
+for 5090 steps and consistently reduced loss, showing no signs of overfitting. Even though all signs
+were positive during training, the leaderboard score
+came out to 14.81, which was slightly worse than
+the previous run. We also saw a 34.1 percent fallback rate.
+We did try increasing the max new tokens from
+2000 to 3500, but we still saw around a 30 percent fallback rate. We were forced to end this run
+midway through due to time constraints.
+
+4.3
+
+Training Duration
+
+Experiment 2 was trained for 1 epoch (around 3
+thousand steps), while experiment 3 was trained
+for 2 epochs (over 5 thousand steps). Experiment
+2’s loss progression consistently decreased every
+500 steps, slightly slowing down between 2500 and
+3000 steps. Experiment 3 also showed a consistent
+decrease in loss, but there was a slight plateau after
+2500 steps, indicating that the second epoch was
+not necessary.
+4.4
+
+Inference Decoding Strategy
+
+The second experiment used a greedy decoding
+with no repetition penalty. During the second run
+of that same experiment, a repetition penalty of 1.3,
+a temperature of 0.2, and a top p of 0.9 were all set.
+This decreased the accuracy, reducing the score
+to 14.40. For the third experiment, we reverted to
+greedy decoding and lowered the repetition penalty
+to 1.05.
+2
+
+Run
+v1 Run 1
+v1 Run 2
+v2 Run 3
+
+r
+8
+8
+16
+
+α
+16
+16
+32
+
+Seq
+1024
+1024
+1536
+
+Steps
+3063
+3063
+5090
+
+Loss
+0.3449
+0.3449
+0.2841
+
+Score
+15.03
+14.40
+14.81
+
+Table 1: Comparison of the main Qwen2.5-3B LoRA
+runs. Runs 1 and 2 use the same trained adapter and
+differ only in inference-time decoding.
+
+4.5
+
+Maximum Sequence Length
+
+The second experiment used a maximum sequence
+length of 1024, which meant that around 20 percent
+of the training SVGs would be truncated. Because
+of this, we increased it to 2048 for the third experiment; however, this caused an out-of-memory
+crash on our GPU. We ultimately settled on 1536,
+which covers 88 percent of the training data. Despite this improved coverage, we still saw a lower
+score.
+4.6
+
+Figure 1: Held-out evaluation loss for the first Qwen2.53B LoRA run (rank 8, α = 16). This run produced the
+best public leaderboard score of 15.03.
+
+System Prompt
+
+The system prompt for the second experiment was
+"You generate compact, valid SVG markup from
+user requests. Return only SVG code with a single
+root <svg> element." In the third experiment, it
+was changed to "Prefer simple shapes (rect, circle,
+polygon, line, path) with minimal coordinates."
+The motivation for the change was to try to reduce
+the sequence length, steering the model toward
+simpler outputs.
+
+5
+
+Figure 2: Training and held-out evaluation loss for the
+higher-capacity v2 Qwen2.5-3B LoRA run (rank 16,
+α = 32). It reaches a lower final evaluation loss than
+v1, even though its public leaderboard score is slightly
+worse.
+
+Results
+
+Table 1 summarizes the three comparable 3B runs.
+The 1.5B pilot is omitted because it only trained for
+7 steps and was used only to verify that the pipeline
+worked end-to-end. The best public leaderboard
+score was 15.03 from the first 3B adapter. The same
+trained adapter dropped to 14.40 when we changed
+only the decoding strategy at inference time, while
+the higher-capacity v2 adapter achieved a lower
+validation loss but a slightly worse leaderboard
+score of 14.81. The loss curves in our analysis
+notebook show that both 3B runs trained stably and
+that v2 consistently achieved lower held-out loss
+than v1.
+The fallback rates remained high in both main
+runs: 35.1 percent for v1 and 34.1 percent for v2.
+This means that relatively small changes in validity
+and truncation behavior had a large effect on the
+final metric.
+
+6
+
+Observations
+
+Several patterns stand out. First, the best result
+came from the simplest inference strategy: greedy
+decoding with no repetition penalty. SVG generation is much more brittle than ordinary text generation because minor perturbations to numeric
+coordinates or path commands can break validity.
+The sampled run with a repetition penalty of 1.3
+likely hurt performance because the penalty distorted repeated numeric and path tokens that are
+actually normal in SVG syntax.
+Second, the lower held-out cross-entropy loss
+did not translate into a better leaderboard score.
+The v2 model achieved the best eval loss but still
+underperformed the simpler v1 run on the public
+leaderboard. This is consistent with the competition metric: once an output becomes invalid, its
+3
+
+score is zero, and even valid outputs are judged
+by rendered similarity rather than token likelihood.
+Standard language-model loss was therefore useful
+during training, but it was not a sufficient proxy for
+SVG validity and visual fidelity.
+Finally, the debug logs show that many failures
+were not semantically wrong icons so much as
+structurally broken outputs. Common issues included generations that stopped in the middle of a
+long path command, invalid XML attributes, hallucinated HTML or prose inserted into the SVG,
+and occasional coordinate drift far outside the intended canvas. These observations suggest that
+future gains are more likely to come from structured decoding and stronger validity control than
+from simply training longer.
+
+7
+
+space.
+Reproducibility. Our code and repository, which
+includes starter-notebook.ipynb for training
+and submission generation, results.ipynb for
+comparing runs, and analyze_run.ipynb
+for failure analysis, is publicly available on GitHub at https://github.com/
+anthony-lamelas/SVG_Generation_Model.
+The final adapters analyzed in this report are
+stored under artifacts/qwen3b_svg_lora/ and
+artifacts/qwen3b_svg_lora_v2/.
+AI Tooling Disclosure. We used LLMs for environment debugging and inference-pipeline troubleshooting. Final experiment decisions, run selection, and report conclusions were done manually.
+
+Conclusion
+
+References
+
+LoRA fine-tuning of a 3B instruction model was a
+viable approach for this competition and produced
+a competitive result under modest hardware. The
+strongest submission did not come from the largest
+or longest-trained configuration; instead, it came
+from the cleaner one-epoch adapter paired with
+conservative greedy decoding. This suggests that,
+for text-to-SVG generation, the reliability of syntax
+and renderability mattered more than squeezing out
+additional improvements in token-level loss.
+If we continued this project, we would focus on
+methods that directly target validity: length-aware
+training to reduce truncation, constrained or XMLaware decoding, and a stronger reranking or repair
+stage for candidate SVGs. We would also isolate
+variables more carefully in future ablations. Our v2
+experiment changed LoRA rank, alpha, sequence
+length, system prompt, and training duration at the
+same time, which made it harder to attribute the
+final score drop to any single factor.
+The main limitation was compute. All training
+was done on a single RTX 3080, sequence lengths
+above 1536 caused out-of-memory failures, and
+both training and full-dataset inference were slow
+enough that only a small number of end-to-end submission runs were feasible. We also had practical
+issues such as notebook resets, long inference jobs,
+and the need to resume partial runs from checkpoints. We even tried training on an M1 MacBook
+Pro for a time, but training took too long. Colab
+was proving troublesome since our runtime would
+often be interrupted. Those constraints limited how
+aggressively we could search the hyperparameter
+
+NYU Tandon Deep Learning Course Staff. 2026a. Dl
+spring 2026 kaggle contest: Text-to-svg generation —
+student guide. Course competition guide.
+NYU Tandon Deep Learning Course Staff. 2026b. Dl
+spring 2026 text-to-svg kaggle competition dataset.
+Competition-provided training dataset distributed
+through Kaggle.
+Qwen Team. 2024. Qwen2.5 technical report. arXiv
+preprint arXiv:2412.15115.
+
+A
+
+Representative Failure Modes
+
+Inspection of the debug logs for both main runs
+revealed three recurring failure types. The most
+common was truncation: the model often produced
+a plausible opening SVG block and then stopped
+in the middle of a long path command, leaving
+the XML unclosed. A second failure type was
+malformed markup, including invalid attributes,
+mismatched tags, and occasional HTML or prose
+fragments mixed into the output. A third type was
+geometric drift, where the SVG remained partly
+parseable but coordinates exploded outside the intended 256 × 256 canvas. These failure modes
+explain why even small decoding changes could
+materially affect the final score.
+
+4
+
+
