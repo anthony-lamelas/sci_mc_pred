@@ -134,3 +134,17 @@ This document tracks the experiments, configurations, and results for the `SmolV
 - **Analysis:** 
   - The combination of image size, metadata, and DoRA helped the model recover from the 50.9% overfitting drop, though it hasn't quite surpassed the 74.4% peak from Run 4. 
   - The heavy regularization from the data augmentation makes it harder for the model to memorize the training set. This suggests we should allow the model to finish its 3rd training epoch, as it likely needs more steps to converge with these augmentations active!
+
+---
+
+## 9. Training Run 8 (Epoch 3 Continuation + Prompt Breaking)
+- **Goal:** Finish the 3rd Epoch from the 65.0% checkpoint to see if the model converges.
+- **Adjustments:**
+  - Resumed training from `epoch_2_step_2072` and trained for 1 additional epoch.
+  - Used identical `Greedy-2tok` inference parameters.
+- **Results:** 
+  - **Final Leaderboard Accuracy:** **41.0%** (Worse than 54% zero-shot baseline)
+- **Analysis:** 
+  - The catastrophic drop in accuracy confirmed that the base model's instruction-following capabilities were broken. 
+  - The core issues were identified as: (1) injecting `Subject:`/`Topic:` and reordering `Question`/`Context` drastically altered the expected prompt template, confusing the LoRA adapter, and (2) `RandomCrop` augmentation was likely deleting critical diagram labels.
+  - **Next Steps:** Revert prompt structure to its original Run 4 format, disable `RandomCrop`, increase resolution to 448px, and retrain cleanly from scratch.
